@@ -1,0 +1,25 @@
+[project]
+name = "penelope"
+version = "0.0.0"
+description = "A self-hosted agent runtime: database-backed agents and prompts, pluggable coding executors, MCP tools."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+keywords = ["agent", "llm", "mcp", "tool-calling", "self-hosted"]
+
+# Runtime dependencies are added as the loop is built. Expected core set:
+#   asyncpg   - Postgres registry + session store
+#   httpx     - provider + executor HTTP clients
+#   mcp       - Model Context Protocol client
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "ruff", "mypy"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
