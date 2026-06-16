@@ -20,6 +20,8 @@ import os
 import sys
 
 from .agent import Agent
+from .coding_tool import DelegateCodingTool
+from .executors.qwen_code import QwenCodeExecutor
 from .mcp_tools import MCPServerConfig, MCPToolSource
 from .provider import OpenAIProvider
 from .tools import AddTool, ToolRegistry
@@ -48,6 +50,9 @@ def _parse_mcp_config(raw: str) -> list[MCPServerConfig]:
 def _build_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(AddTool())
+    registry.register(
+        DelegateCodingTool(QwenCodeExecutor(), default_workspace=os.getcwd())
+    )
     return registry
 
 
@@ -143,6 +148,22 @@ async def _run_code(prompt: str, workspace: str) -> int:
     return 1 if saw_error else 0
 
 
+def _run_serve(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="penelope serve")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8770)
+    opts = parser.parse_args(argv)
+
+    host = "127.0.0.1" if opts.host == "0.0.0.0" else opts.host
+
+    import uvicorn
+
+    from .server import create_app
+
+    uvicorn.run(create_app(), host=host, port=opts.port)
+    return 0
+
+
 async def main() -> int:
     args = _parse_args(sys.argv[1:])
 
@@ -234,4 +255,7 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["serve"]:
+        # `serve` runs uvicorn (its own event loop) synchronously, outside asyncio.run.
+        raise SystemExit(_run_serve(sys.argv[2:]))
     raise SystemExit(asyncio.run(main()))
