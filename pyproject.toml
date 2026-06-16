@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 license = { file = "LICENSE" }
 keywords = ["agent", "llm", "mcp", "tool-calling", "self-hosted"]
 
-dependencies = ["openai>=1.40", "mcp>=1.2"]
+dependencies = ["openai>=1.40", "mcp>=1.2", "asyncpg>=0.30"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "ruff", "mypy"]
@@ -15,6 +15,10 @@ dev = ["pytest", "pytest-asyncio", "ruff", "mypy"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["penelope"]
+artifacts = ["penelope/store/*.sql"]
 
 [tool.ruff]
 target-version = "py312"
