@@ -95,6 +95,37 @@ async def test_tool_round_trip() -> None:
     )
 
 
+async def test_history_is_passed_through() -> None:
+    provider = FakeProvider(
+        turns=[
+            [
+                ProviderChunk(text_delta="your name is Sam"),
+                ProviderChunk(tool_calls=None, finish_reason="stop"),
+            ]
+        ]
+    )
+    agent = Agent(provider, _registry())
+
+    history = [
+        {"role": "user", "content": "my name is Sam"},
+        {"role": "assistant", "content": "Hi Sam"},
+    ]
+    events = [ev async for ev in agent.run("what's my name?", history=history)]
+    types = [ev.type for ev in events]
+
+    assert types[-1] == "done"
+    assert types.count("done") == 1
+
+    # The provider must have seen the two history entries IN ORDER, before the
+    # new user message. No system prompt on this agent, so order is exact.
+    seen = provider.seen_messages[0]
+    assert seen == [
+        {"role": "user", "content": "my name is Sam"},
+        {"role": "assistant", "content": "Hi Sam"},
+        {"role": "user", "content": "what's my name?"},
+    ]
+
+
 async def test_no_tools() -> None:
     provider = FakeProvider(
         turns=[

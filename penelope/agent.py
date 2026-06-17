@@ -29,10 +29,14 @@ class Agent:
         self.system_prompt = system_prompt
         self.max_turns = max_turns
 
-    async def run(self, user_message: str) -> AsyncIterator[Event]:
+    async def run(
+        self, user_message: str, history: list[dict] | None = None
+    ) -> AsyncIterator[Event]:
         messages: list[dict] = []
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
+        if history:
+            messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
         schemas = self.tools.schemas()
