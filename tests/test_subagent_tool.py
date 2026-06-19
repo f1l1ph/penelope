@@ -90,6 +90,60 @@ async def test_async_load_subagent_is_awaited():
     assert out == "ok"
 
 
+async def test_on_event_forwards_events_in_order():
+    def load_subagent(name):
+        return {"name": name, "model": "m", "system_prompt": "p"}
+
+    def build_subagent(spec):
+        return FakeAgent(
+            [
+                Event("token", {"text": "hello "}),
+                Event("token", {"text": "world"}),
+                Event("done", {"result": "final answer"}),
+            ]
+        )
+
+    forwarded: list[dict] = []
+    tool = SpawnSubagentTool(
+        load_subagent=load_subagent,
+        build_subagent=build_subagent,
+        on_event=forwarded.append,
+    )
+    out = await tool.run({"name": "writer", "task": "do a thing"})
+
+    assert out == "final answer"
+    assert forwarded == [
+        {"type": "token", "data": {"text": "hello "}},
+        {"type": "token", "data": {"text": "world"}},
+        {"type": "done", "data": {"result": "final answer"}},
+    ]
+
+
+async def test_on_event_that_raises_does_not_break_run():
+    def load_subagent(name):
+        return {"name": name, "model": "m", "system_prompt": "p"}
+
+    def build_subagent(spec):
+        return FakeAgent(
+            [
+                Event("token", {"text": "hello "}),
+                Event("token", {"text": "world"}),
+                Event("done", {}),
+            ]
+        )
+
+    def boom(event):
+        raise RuntimeError("callback exploded")
+
+    tool = SpawnSubagentTool(
+        load_subagent=load_subagent,
+        build_subagent=build_subagent,
+        on_event=boom,
+    )
+    out = await tool.run({"name": "writer", "task": "do a thing"})
+    assert out == "hello world"
+
+
 async def test_error_event_reports_failure():
     def load_subagent(name):
         return {"name": name, "model": "m", "system_prompt": "p"}

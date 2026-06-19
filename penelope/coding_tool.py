@@ -7,11 +7,13 @@ concise summary of what was done.
 
 from __future__ import annotations
 
+from typing import Callable
+
 from .executors import CodingExecutor, CodingTask
 
 
 class DelegateCodingTool:
-    __slots__ = ("_executor", "_default_workspace")
+    __slots__ = ("_executor", "_default_workspace", "_on_event")
 
     name = "delegate_coding"
     description = (
@@ -38,9 +40,16 @@ class DelegateCodingTool:
         "required": ["task"],
     }
 
-    def __init__(self, executor: CodingExecutor, *, default_workspace: str) -> None:
+    def __init__(
+        self,
+        executor: CodingExecutor,
+        *,
+        default_workspace: str,
+        on_event: Callable[[dict], None] | None = None,
+    ) -> None:
         self._executor = executor
         self._default_workspace = default_workspace
+        self._on_event = on_event
 
     async def run(self, arguments: dict) -> str:
         task = CodingTask(
@@ -54,6 +63,11 @@ class DelegateCodingTool:
 
         # Blocking by design: streaming inner events up through this loop is deferred to a later slice.
         async for ev in self._executor.run(task):
+            if self._on_event is not None:
+                try:
+                    self._on_event({"type": ev.type, "data": dict(ev.data)})
+                except Exception:
+                    pass
             if ev.type == "tool_result":
                 content = ev.data.get("content")
                 if content is not None:

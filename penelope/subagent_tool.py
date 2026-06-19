@@ -15,7 +15,7 @@ from typing import Any, Awaitable, Callable
 
 
 class SpawnSubagentTool:
-    __slots__ = ("_load_subagent", "_build_subagent")
+    __slots__ = ("_load_subagent", "_build_subagent", "_on_event")
 
     name = "spawn_subagent"
     description = (
@@ -42,11 +42,13 @@ class SpawnSubagentTool:
         *,
         load_subagent: Callable[[str], dict | None | Awaitable[dict | None]],
         build_subagent: Callable[[dict], Any],
+        on_event: Callable[[dict], None] | None = None,
     ) -> None:
         # load_subagent(name) -> spec dict | None; may be sync OR a coroutine
         # (awaited below). build_subagent(spec) -> Agent (synchronous).
         self._load_subagent = load_subagent
         self._build_subagent = build_subagent
+        self._on_event = on_event
 
     async def run(self, arguments: dict) -> str:
         try:
@@ -69,6 +71,11 @@ class SpawnSubagentTool:
             result: str | None = None
             # Blocking: streaming the subagent's inner events up is future work.
             async for ev in agent.run(task):
+                if self._on_event is not None:
+                    try:
+                        self._on_event({"type": ev.type, "data": dict(ev.data)})
+                    except Exception:
+                        pass
                 if ev.type == "token":
                     text_parts.append(ev.data.get("text", ""))
                 elif ev.type == "error":

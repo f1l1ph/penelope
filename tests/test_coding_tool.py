@@ -56,6 +56,45 @@ async def test_run_on_error_does_not_raise():
     assert "boom" in out
 
 
+async def test_on_event_forwards_events_in_order():
+    fake = FakeExecutor(
+        [
+            ExecutorEvent(
+                "tool_result",
+                {"id": "1", "is_error": False, "content": "wrote file"},
+            ),
+            ExecutorEvent("done", {"result": "Created hello.txt"}),
+        ]
+    )
+    forwarded: list[dict] = []
+    tool = DelegateCodingTool(
+        fake, default_workspace="/tmp", on_event=forwarded.append
+    )
+    out = await tool.run({"task": "make hello.txt"})
+
+    # Return value is unchanged when on_event is set.
+    assert "Created hello.txt" in out
+
+    assert forwarded == [
+        {
+            "type": "tool_result",
+            "data": {"id": "1", "is_error": False, "content": "wrote file"},
+        },
+        {"type": "done", "data": {"result": "Created hello.txt"}},
+    ]
+
+
+async def test_on_event_that_raises_does_not_break_run():
+    fake = FakeExecutor([ExecutorEvent("done", {"result": "ok"})])
+
+    def boom(event):
+        raise RuntimeError("callback exploded")
+
+    tool = DelegateCodingTool(fake, default_workspace="/tmp", on_event=boom)
+    out = await tool.run({"task": "t"})
+    assert "ok" in out
+
+
 async def test_workspace_passthrough():
     fake = FakeExecutor([ExecutorEvent("done", {"result": "ok"})])
     tool = DelegateCodingTool(fake, default_workspace="/tmp")
