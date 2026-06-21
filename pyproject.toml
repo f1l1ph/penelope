@@ -7,10 +7,10 @@ requires-python = ">=3.12"
 license = { file = "LICENSE" }
 keywords = ["agent", "llm", "mcp", "tool-calling", "self-hosted"]
 
-dependencies = ["openai>=1.40", "mcp>=1.2", "asyncpg>=0.30", "fastapi", "uvicorn[standard]"]
+dependencies = ["openai>=1.40", "mcp>=1.2", "asyncpg>=0.30", "fastapi", "uvicorn[standard]", "httpx", "trafilatura", "ddgs"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "ruff", "mypy", "httpx"]
+dev = ["pytest", "pytest-asyncio", "ruff", "mypy"]
 
 [build-system]
 requires = ["hatchling"]
