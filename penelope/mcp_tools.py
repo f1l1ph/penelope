@@ -9,12 +9,15 @@ yields the adapters, and tears the sessions down on exit.
 
 from __future__ import annotations
 
+import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+logger = logging.getLogger(__name__)
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 
@@ -54,29 +57,45 @@ class MCPToolSource:
 
     def __init__(self, configs: list[MCPServerConfig]) -> None:
         self._configs = configs
-        self._stack = AsyncExitStack()
+        self._stacks: list[AsyncExitStack] = []
 
     async def __aenter__(self) -> list[MCPToolAdapter]:
-        await self._stack.__aenter__()
         adapters: list[MCPToolAdapter] = []
-        try:
-            for config in self._configs:
+        # Each server gets its OWN AsyncExitStack, entered and (on failure) closed
+        # within this same task. The MCP SDK runs each server inside an anyio cancel
+        # scope; sharing one stack across servers and unwinding them together is the
+        # documented cause of "exit cancel scope in a different task" crashes once
+        # two or more servers are configured. Isolated stacks also let one server
+        # fail without dropping the others.
+        for config in self._configs:
+            stack = AsyncExitStack()
+            await stack.__aenter__()
+            try:
                 params = StdioServerParameters(
                     command=config.command,
                     args=config.args,
                     env=config.env,
                 )
-                read, write = await self._stack.enter_async_context(stdio_client(params))
-                session = await self._stack.enter_async_context(ClientSession(read, write))
+                read, write = await stack.enter_async_context(stdio_client(params))
+                session = await stack.enter_async_context(ClientSession(read, write))
                 await session.initialize()
                 listed = await session.list_tools()
                 # Tool-name collisions across servers are out of scope: last registered wins.
-                for tool in listed.tools:
-                    adapters.append(MCPToolAdapter(tool, session))
-        except Exception as exc:
-            await self._stack.aclose()
-            raise RuntimeError(f"failed to start MCP server {config.name!r}: {exc}") from exc
+                server_adapters = [MCPToolAdapter(tool, session) for tool in listed.tools]
+            except Exception as exc:
+                logger.warning(
+                    "MCP server %r unavailable, skipping: %s", config.name, exc
+                )
+                await stack.aclose()
+                continue
+            self._stacks.append(stack)
+            adapters.extend(server_adapters)
         return adapters
 
     async def __aexit__(self, *exc_info: Any) -> bool | None:
-        return await self._stack.__aexit__(*exc_info)
+        for stack in reversed(self._stacks):
+            try:
+                await stack.aclose()
+            except Exception:  # noqa: BLE001 - one noisy teardown must not mask others
+                pass
+        return None
