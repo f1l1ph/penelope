@@ -16,6 +16,7 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamablehttp_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ class MCPServerConfig:
     command: str
     args: list[str] = field(default_factory=list)
     env: dict[str, str] | None = None
+    transport: str = "stdio"
+    url: str | None = None
 
 
 class MCPToolAdapter:
@@ -71,12 +74,19 @@ class MCPToolSource:
             stack = AsyncExitStack()
             await stack.__aenter__()
             try:
-                params = StdioServerParameters(
-                    command=config.command,
-                    args=config.args,
-                    env=config.env,
-                )
-                read, write = await stack.enter_async_context(stdio_client(params))
+                if config.transport == "streamable-http":
+                    # streamablehttp_client yields (read, write, get_session_id);
+                    # the third value is ignored here.
+                    read, write, _ = await stack.enter_async_context(
+                        streamablehttp_client(config.url)
+                    )
+                else:
+                    params = StdioServerParameters(
+                        command=config.command,
+                        args=config.args,
+                        env=config.env,
+                    )
+                    read, write = await stack.enter_async_context(stdio_client(params))
                 session = await stack.enter_async_context(ClientSession(read, write))
                 await session.initialize()
                 listed = await session.list_tools()
